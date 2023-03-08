@@ -7,17 +7,16 @@ const config: HardhatUserConfig = {
   solidity: "0.8.19",
   networks: {
     hardhat: {
-      chainId: 1337, // We set 1337 to make interacting with MetaMask simpler
-      forking: {
-        url: "https://eth.public-rpc.com",
-        blockNumber: 15380054,
-      }
+      chainId: 1337,
     },
     testnet: {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545",
       chainId: 97,
-      accounts: privateKeys,
-    }
+    },
+    mainnet: {
+      url: "https://bsc-dataseed.binance.org/",
+      chainId: 56,
+    },
   }
 };
 
