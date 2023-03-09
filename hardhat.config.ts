@@ -9,7 +9,6 @@ const config: HardhatUserConfig = {
       chainId: 1337,
       forking: {
         url: "https://bscrpc.com",
-        blockNumber: 26301200,
       },
     },
   }
