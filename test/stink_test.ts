@@ -237,6 +237,8 @@ describe("STINKv2", function () {
         expect(stakedAmount.sub(vaultTokens)).to.be.lessThan(1000);
       else
         expect(vaultTokens.sub(stakedAmount)).to.be.lessThan(1000);
+      //  Marketing and LP fees
+      expect(await STINK.balanceOf(STINK.address)).to.be.equal(stakedAmount.mul(2))
     })
   })
   describe("Sell Taxes", () => {
