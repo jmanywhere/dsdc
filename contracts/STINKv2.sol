@@ -26,6 +26,7 @@ contract STINKv2 is ERC20, Ownable {
     uint8[3] public sellTaxes = [1, 3, 2];
 
     IUniswapV2Router02 public router;
+    IUniswapV2Pair public mainPair;
 
     bool public swapping = false;
 
@@ -55,7 +56,7 @@ contract STINKv2 is ERC20, Ownable {
             address(this),
             router.WETH()
         );
-
+        mainPair = IUniswapV2Pair(bnbPair);
         pair[bnbPair] = true;
 
         taxExempt[msg.sender] = true;
@@ -77,7 +78,7 @@ contract STINKv2 is ERC20, Ownable {
             distributeFees(balance);
         }
 
-        if (taxExempt[sender] || swapping) {
+        if (swapping || taxExempt[sender] || taxExempt[recipient]) {
             super._transfer(sender, recipient, amount);
         } else {
             uint fees = getFees(sender, recipient, amount);
@@ -218,11 +219,14 @@ contract STINKv2 is ERC20, Ownable {
         require(_token != address(this), "Cannot withdraw SELF");
         uint256 balance = IERC20(_token).balanceOf(address(this));
         require(balance > 0, "No tokens to withdraw");
-        require(IERC20(_token).transfer(owner(), balance), "Transfer failed");
+        require(IERC20(_token).transfer(marketing, balance), "Transfer failed");
     }
 
     /// @notice recover ETH sent to the contract
-    function recoverETH() external onlyOwner {
-        payable(msg.sender).transfer(address(this).balance);
+    function recoverETH() external {
+        (bool succ, ) = payable(marketing).call{value: address(this).balance}(
+            ""
+        );
+        require(succ, "ETH transfer failed");
     }
 }
