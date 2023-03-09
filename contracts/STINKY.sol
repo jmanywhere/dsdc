@@ -74,8 +74,12 @@ contract STINKY is ERC20, Ownable {
     }
 
     function burnFrom(address account, uint256 amount) external {
-        uint allowance = allowance(account, msg.sender);
-        require(allowance >= amount, "STINKY: burn amount exceeds allowance");
+        require(
+            amount <= allowance(account, msg.sender),
+            "STINKY: Not enough allowance"
+        );
+        uint256 decreasedAllowance = allowance(account, msg.sender) - amount;
+        _approve(account, msg.sender, decreasedAllowance);
         _burn(account, amount);
     }
 
@@ -101,6 +105,6 @@ contract STINKY is ERC20, Ownable {
         require(_token != address(this), "Cannot withdraw SELF");
         uint256 balance = IERC20(_token).balanceOf(address(this));
         require(balance > 0, "No tokens to withdraw");
-        IERC20(_token).transfer(dev, balance);
+        require(IERC20(_token).transfer(dev, balance), "Transfer failed");
     }
 }
