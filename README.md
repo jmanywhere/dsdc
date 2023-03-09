@@ -11,3 +11,5 @@ Here are the specifics:
 - This tax applies for sells or transfers.
 - All taxes are sent to a dev wallet, the dev wallet can be changed as needed.
 - It is mintable, increases supply when rewards are collected.
+
+### !!Remember to exclude POOLS and PAIRS from Taxes!!
