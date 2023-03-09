@@ -22,8 +22,9 @@ contract STINKv2 is ERC20, Ownable {
     uint public totalStaking;
     uint public totalMarketing;
 
+    // Taxes are: Marketing, Liquidity, Staking
     uint8[3] public buyTaxes = [1, 1, 1];
-    uint8[3] public sellTaxes = [1, 3, 2];
+    uint8[3] public sellTaxes = [2, 1, 3];
 
     IUniswapV2Router02 public router;
     IUniswapV2Pair public mainPair;
@@ -48,7 +49,7 @@ contract STINKv2 is ERC20, Ownable {
         address _liquidityVault
     ) ERC20("STINKv2", "STINKv2") {
         _mint(msg.sender, 1_000_000_000 ether);
-        sellThreshold = 1_000 ether;
+        sellThreshold = 100 ether;
         // SET DEFAULT INIT PAIR
         router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
         IUniswapV2Factory pancakeFactory = IUniswapV2Factory(router.factory());
@@ -97,12 +98,24 @@ contract STINKv2 is ERC20, Ownable {
             mkt = (marketingFee * amount) / totalFees;
             liq = amount - mkt;
         }
-        if (liq > 0) _swapAndLiquify(liq);
-        if (mkt > 0) _swapForEth(mkt);
-        (bool succ, ) = payable(marketing).call{value: address(this).balance}(
-            ""
-        );
-        require(succ, "Marketing transfer failed");
+        if (liq > 0) {
+            _swapAndLiquify(liq);
+            liq = 0; // reset just in case
+            liquidityFee = 0;
+        }
+        if (mkt > 0) {
+            _swapForEth(mkt);
+            liq = address(this).balance;
+            totalMarketing += address(this).balance;
+            marketingFee = 0;
+        }
+        // Send ETH to marketing wallet
+        if (liq > 0) {
+            (bool succ, ) = payable(marketing).call{
+                value: address(this).balance
+            }("");
+            require(succ, "Marketing transfer failed");
+        }
     }
 
     /// @notice Swap half tokens for ETH and create liquidity internally
@@ -157,6 +170,7 @@ contract STINKv2 is ERC20, Ownable {
         uint mktFee;
         uint liqFee;
         uint stakingFee;
+        // BUY transaction
         if (pair[sender]) {
             mktFee += (amount * buyTaxes[0]) / 100;
             liqFee += (amount * buyTaxes[1]) / 100;
@@ -167,7 +181,9 @@ contract STINKv2 is ERC20, Ownable {
             totalStaking += stakingFee;
             super._transfer(sender, vault, stakingFee);
             super._transfer(sender, address(this), mktFee + liqFee);
-        } else if (pair[recipient]) {
+        }
+        // SELL transaction
+        else if (pair[recipient]) {
             mktFee += (amount * sellTaxes[0]) / 100;
             liqFee += (amount * sellTaxes[1]) / 100;
             stakingFee += (amount * sellTaxes[2]) / 100;
@@ -177,6 +193,8 @@ contract STINKv2 is ERC20, Ownable {
             super._transfer(sender, address(this), mktFee + liqFee);
             super._transfer(sender, vault, stakingFee);
         }
+        // DO NOTHING IF NONE
+        else return 0;
     }
 
     function burn(uint256 amount) external {
