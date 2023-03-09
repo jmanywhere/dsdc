@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import  hre, { ethers } from 'hardhat';
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { parseUnits } from "ethers/lib/utils";
+import { parseUnits,formatEther } from "ethers/lib/utils";
 
 describe("STINKv2", function () {
   const initBalance = parseUnits("1000000000", "ether");
@@ -242,14 +242,88 @@ describe("STINKv2", function () {
     })
   })
   describe("Sell Taxes", () => {
-    it("Should have the right taxes", async ()=> {})
-    it("Should not charge tax if seller is tax exempt", async ()=> {})
-    it("Should charge the correct tax amount from transaction", async ()=> {})
-    it("Should distribute staking tax directly to vault", async ()=> {})
+    it("Should have the right taxes", async ()=> {
+      const { STINK } = await loadFixture(liquiditySetup);
+      expect(await STINK.sellTaxes(0)).to.equal(2);
+      expect(await STINK.sellTaxes(1)).to.equal(1);
+      expect(await STINK.sellTaxes(2)).to.equal(3);
+    })
+    it("Should not charge tax if seller is tax exempt", async ()=> {
+      const { STINK, owner, router } = await loadFixture(liquiditySetup);
+      const tokenAmount = parseUnits("100", "ether");
+
+      const amounts = (await router.getAmountsOut(tokenAmount, [STINK.address, await router.WETH()]))[1];
+      const ownerTokens = await STINK.balanceOf(owner.address);
+      const ownerETH = await owner.getBalance();
+
+      await STINK.connect(owner).approve(router.address, tokenAmount);
+
+      await router.connect(owner).swapExactTokensForETH(tokenAmount, 0, [STINK.address, await router.WETH()], owner.address, (await time.latest())+3600);
+      expect(await STINK.balanceOf(owner.address)).to.equal(ownerTokens.sub(tokenAmount));
+      // A difference of 0.001 is acceptable
+      const currentBalance = await owner.getBalance();
+      if(currentBalance.gt(ownerETH.add(amounts)))
+        expect(currentBalance.sub(ownerETH.add(amounts))).to.be.lessThan(parseUnits("0.001", "ether"));
+      else
+        expect(ownerETH.add(amounts).sub(currentBalance)).to.be.lessThan(parseUnits("0.001", "ether"));
+    })
+    it("Should charge the correct tax amount from transaction and send staking tax to vault", async ()=> {
+      const {STINK, owner, user1, router} = await loadFixture(liquiditySetup);
+      const tokenAmount = parseUnits("100", "ether");
+
+      await STINK.connect(owner).transfer(user1.address, tokenAmount);
+      
+      await STINK.connect(user1).approve(router.address, tokenAmount);
+      await router.connect(user1).swapExactTokensForETHSupportingFeeOnTransferTokens(tokenAmount, 0, [STINK.address, await router.WETH()], user1.address, (await time.latest())+3600);
+      // A difference of 1e-15 is acceptable
+      expect(await STINK.marketingFee()).to.equal(tokenAmount.mul(2).div(100));
+      expect(await STINK.liquidityFee()).to.equal(tokenAmount.mul(1).div(100));
+      expect(await STINK.balanceOf(STINK.address)).to.equal(tokenAmount.mul(3).div(100));
+      expect(await STINK.balanceOf(await STINK.vault())).to.equal(tokenAmount.mul(3).div(100));
+    })
   })
   describe("Tax distribution", () => {
-    it("Should distribute ETH to the marketing wallet", async() => {})
-    it("Should distribute liquidity to the liquidityVault wallet", async() => {})
+    it("Should have the right threshold", async () =>{
+      const { STINK } = await loadFixture(liquiditySetup);
+      expect(await STINK.sellThreshold()).to.equal(parseUnits("100", "ether"));
+    })
+    it("Should distribute ETH and liquidity appropriately", async() => {
+      const { router, STINK, user1, owner, user2, marketing } = await loadFixture(liquiditySetup);
+
+      const sellThreshold = await STINK.sellThreshold();
+      const toSell = sellThreshold.mul(100).div(2); // since we need more than the threshold to trigger the distribution
+
+      const pair = await ethers.getContractAt("IUniswapV2Pair", await STINK.mainPair());
+      const currentMarketingETH = await marketing.getBalance();
+      
+      await STINK.connect(owner).transfer(user1.address, toSell);
+      
+      await STINK.connect(user1).approve(router.address, toSell);
+      
+      await router.connect(user1).swapExactTokensForETHSupportingFeeOnTransferTokens(toSell, 0, [STINK.address, await router.WETH()], user1.address, (await time.latest())+3600);
+      
+      expect(await STINK.sellThreshold()).to.be.lessThanOrEqual(await STINK.balanceOf(STINK.address));
+      const currentLiquidity = await pair.totalSupply();
+      // Any transfer should trigger the distribution
+      await STINK.connect(owner).transfer(user2.address, parseUnits("1", "ether"));
+      
+
+      expect(await pair.totalSupply()).to.be.greaterThan(currentLiquidity);
+      expect(await marketing.getBalance()).to.be.greaterThan(currentMarketingETH);
+      // check that the fees are 0
+      expect(await STINK.marketingFee()).to.equal(0);
+      expect(await STINK.liquidityFee()).to.equal(0);
+      expect(await ethers.provider.getBalance(STINK.address)).to.equal(0);
+      expect(await STINK.balanceOf(STINK.address)).to.be.lessThan(parseUnits("0.1", "ether"));
+      // check that total fees are updated
+      console.log({
+        liquidity: currentLiquidity.toString(),
+        pairSupply: (await pair.totalSupply()).toString(),
+      })
+      expect(await STINK.totalMarketing()).to.equal((await marketing.getBalance()).sub(currentMarketingETH));
+      // Liquidity given is a bit less than the total created since the pair has a fee
+      expect(await STINK.totalLiquidity()).to.be.greaterThanOrEqual((await pair.totalSupply()).sub(currentLiquidity).mul(92).div(100));
+    })
   })
 
 });
