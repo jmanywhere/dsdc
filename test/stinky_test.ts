@@ -138,7 +138,6 @@ describe("STINKY", function () {
       await hre.network.provider.send("hardhat_mine", ["0x15180", "0x3"])
       await STINKY.connect(user1).transfer(user3.address, 100);
       expect(await STINKY.balanceOf(user3.address)).to.equal(100);
-      
     });
   })
 });
