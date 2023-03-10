@@ -75,7 +75,7 @@ contract STINKv2 is ERC20, Ownable {
         uint256 amount
     ) internal virtual override {
         uint balance = balanceOf(address(this));
-        if (balance > sellThreshold && !swapping) {
+        if (balance > sellThreshold && !swapping && !pair[sender]) {
             distributeFees(balance);
         }
 
