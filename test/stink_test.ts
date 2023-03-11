@@ -158,7 +158,11 @@ describe("STINKv2", function () {
       // Check balances
       expect(await STINK.balanceOf(pair.address)).to.equal(tokenAmount);
       // reserve1 is WETH
-      expect((await pair.getReserves()).reserve1).to.equal(ethAmount);
+      if(await pair.token0() == STINK.address)
+        expect((await pair.getReserves()).reserve1).to.equal(ethAmount);
+      else
+        expect((await pair.getReserves()).reserve0).to.equal(ethAmount);
+
       expect( await pair.totalSupply()).to.be.greaterThan(0);
     })
     it("Should remove liquidity from the pool", async ()=> {
