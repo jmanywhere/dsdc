@@ -6,30 +6,33 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract STINKv2 is ERC20, Ownable {
+    // Mapping of addresses that are tax exempt
     mapping(address => bool) public taxExempt;
+    // Mapping of addresses that are pairs
     mapping(address => bool) public pair;
 
+    // Tax Related Wallets
     address public marketing;
-    address public vault;
-    address public liquidityVault;
+    address public vault; // This address holds the STINKv2 tokens for staking
+    address public liquidityVault; // This address holds the liquidity tokens
 
-    uint public liquidityFee;
-    uint public marketingFee;
+    uint public liquidityFee; // Amount collected that belongs to liquidity
+    uint public marketingFee; // Amount collected that belongs to marketing
 
-    uint public sellThreshold;
+    uint public sellThreshold; // Amount of tokens needed in collection to trigger a swap
 
-    uint public totalLiquidity;
-    uint public totalStaking;
-    uint public totalMarketing;
+    uint public totalLiquidity; // total liquidity tokens created and sent to liquidity vault
+    uint public totalStaking; // total STINKv2 tokens sent to staking vault
+    uint public totalMarketing; // total ETH sent to marketing wallet
 
     // Taxes are: Marketing, Liquidity, Staking
     uint8[3] public buyTaxes = [1, 1, 1];
     uint8[3] public sellTaxes = [2, 1, 3];
 
-    IUniswapV2Router02 public router;
-    IUniswapV2Pair public mainPair;
+    IUniswapV2Router02 public router; // PancakeSwap Router
+    IUniswapV2Pair public mainPair; // Main pair for the token STINKv2 / BNB
 
-    bool public swapping = false;
+    bool public swapping = false; // Prevents reentrancy
 
     event SwapAndLiquify(
         uint tokensSwapped,
@@ -37,6 +40,7 @@ contract STINKv2 is ERC20, Ownable {
         uint tokensIntoLiqudity
     );
 
+    /// @notice Locks the contract for a single tx
     modifier lockTheSwap() {
         swapping = true;
         _;
@@ -69,12 +73,19 @@ contract STINKv2 is ERC20, Ownable {
     /// @notice Allowed to receive ETH
     receive() external payable {}
 
+    /// @notice Execute transfer, if enought tokens, swap and distribute fes
+    /// @param sender Sender address
+    /// @param recipient Recipient address
+    /// @param amount Amount of tokens to transfer
+    /// @dev Override ERC20 transfer function
+    /// @dev If the sender is not tax exempt, calculate the fees, substract from amount and transfer staking fee to vault
     function _transfer(
         address sender,
         address recipient,
         uint256 amount
     ) internal virtual override {
         uint balance = balanceOf(address(this));
+        // Cant distribute Fees on a BUY transaction
         if (balance > sellThreshold && !swapping && !pair[sender]) {
             distributeFees(balance);
         }
@@ -88,6 +99,10 @@ contract STINKv2 is ERC20, Ownable {
         }
     }
 
+    /// @notice Creates liquidity from current balance and sends ETH to marketing wallet
+    /// @param amount Amount of tokens to swap
+    /// @dev We always use the total amount of fees collected, if the amount is different, we calculate the percentage
+    /// @dev we first create liquidity to stregthen the pool, then swap marketing for ETH and send to marketing wallet
     function distributeFees(uint amount) private lockTheSwap {
         uint totalFees = marketingFee + liquidityFee;
 
@@ -120,6 +135,7 @@ contract STINKv2 is ERC20, Ownable {
 
     /// @notice Swap half tokens for ETH and create liquidity internally
     /// @param tokens Amount of tokens to swap
+    /// @dev Please note that actual liquidity created vs amount allocated to liquidity vault is not 1:1 due to fees on creating liquidity
     function _swapAndLiquify(uint tokens) private {
         uint half = tokens / 2;
         uint otherHalf = tokens - half;
@@ -162,6 +178,11 @@ contract STINKv2 is ERC20, Ownable {
         );
     }
 
+    /// @notice Calculate fees for a transaction
+    /// @param sender Sender address
+    /// @param recipient Recipient address
+    /// @param amount Amount of tokens to transfer
+    /// @dev by determining wether the transaction is a buy or sell, we can apply the correct taxes
     function getFees(
         address sender,
         address recipient,
@@ -197,35 +218,51 @@ contract STINKv2 is ERC20, Ownable {
         else return 0;
     }
 
+    /// @notice BURN tokens (Reduces total supply and removes tokens from circulation)
+    /// @param amount amount of tokens to BURN
     function burn(uint256 amount) external {
         _burn(msg.sender, amount);
     }
 
+    /// @notice BURN tokens from another account (Reduces total supply and removes tokens from circulation)
+    /// @param account account to burn tokens from
+    /// @param amount amount of tokens to BURN
     function burnFrom(address account, uint256 amount) external {
-        require(
-            amount <= allowance(account, msg.sender),
-            "STINKv2: Not enough allowance"
-        );
-        uint256 decreasedAllowance = allowance(account, msg.sender) - amount;
+        uint allowed = allowance(account, msg.sender);
+        require(amount <= allowed, "STINKv2: Not enough allowance");
+        uint256 decreasedAllowance = allowed - amount;
         _approve(account, msg.sender, decreasedAllowance);
         _burn(account, amount);
     }
 
+    /// @notice Set Exempt status for a single address
+    /// @param account Address to set exempt status for
+    /// @param exempt Exempt status (True = exempt, False = not exempt)
+    /// @dev only OWNER of contract can set exempt status
     function setTaxExempt(address account, bool exempt) external onlyOwner {
         require(account != address(0), "STINKv2: zero address");
         taxExempt[account] = exempt;
     }
 
+    /// @notice Set the marketing wallet address
+    /// @param account Address of the marketing wallet
+    /// @dev only OWNER of contract can set marketing wallet address
     function setMarketingWallet(address account) external onlyOwner {
         require(account != address(0), "STINKv2: zero address");
         marketing = account;
     }
 
+    /// @notice Set the vault address
+    /// @param account Address of the vault
+    /// @dev only OWNER of contract can set vault address
     function setVaultAddress(address account) external onlyOwner {
         require(account != address(0), "STINKv2: zero address");
         vault = account;
     }
 
+    /// @notice Set the liquidity vault address
+    /// @param account Address of the liquidity vault
+    /// @dev only OWNER of contract can set liquidity vault address
     function setLiquidityVaultAddress(address account) external onlyOwner {
         require(account != address(0), "STINKv2: zero address");
         liquidityVault = account;
