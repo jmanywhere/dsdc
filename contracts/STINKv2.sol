@@ -99,6 +99,13 @@ contract STINKv2 is ERC20, Ownable {
         }
     }
 
+    /// @notice Manually distribute fees
+    /// @dev This function is to be called by anyone to distribute fees if they feel fees aren't being distributed
+    function manualDistribute() external {
+        uint balance = balanceOf(address(this));
+        distributeFees(balance);
+    }
+
     /// @notice Creates liquidity from current balance and sends ETH to marketing wallet
     /// @param amount Amount of tokens to swap
     /// @dev We always use the total amount of fees collected, if the amount is different, we calculate the percentage
@@ -283,5 +290,13 @@ contract STINKv2 is ERC20, Ownable {
             ""
         );
         require(succ, "ETH transfer failed");
+    }
+
+    /// @notice Set the threshold to trigger tax distribution
+    /// @param _threshold Amount of tokens to trigger tax distribution
+    /// @dev only OWNER of contract can set threshold and threshold should be lower than 1% of total supply
+    function setThreshold(uint256 _threshold) external onlyOwner {
+        require(_threshold <= (totalSupply() * 1) / 100, "Threshold too high");
+        sellThreshold = _threshold;
     }
 }
