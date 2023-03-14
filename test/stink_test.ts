@@ -60,6 +60,13 @@ describe("STINKv2", function () {
       await STINK.connect(owner).burn(100);
       expect(await STINK.balanceOf(owner.address)).to.equal(initBalance.sub(100));
     });
+    it("Should burn tokens from", async function () {
+      const { STINK, owner, user1 } = await loadFixture(setup);
+      await expect(STINK.connect(user1).burnFrom(owner.address, 100)).to.be.revertedWith("STINKv2: Not enough allowance");
+      await STINK.connect(owner).approve(user1.address, 100);
+      await STINK.connect(user1).burnFrom(owner.address, 100);
+      expect(await STINK.balanceOf(owner.address)).to.equal(initBalance.sub(100));
+    });
   });
 
   describe("Owner functions", function (){
@@ -110,6 +117,18 @@ describe("STINKv2", function () {
       // set the wallet
       await STINK.connect(owner).setLiquidityVaultAddress(user1.address);
       expect( await STINK.liquidityVault()).to.equal(await user1.getAddress());
+    })
+    it("Should set the sell Threshold if owner", async function () {
+      const { STINK, owner, user1 } = await loadFixture(setup);
+      const newThreshold = ethers.utils.parseEther("1")
+      const oldThreshold = ethers.utils.parseEther("100")
+      // Base case
+      expect( await STINK.sellThreshold()).to.equal(oldThreshold);
+      // expect reversion
+      await expect(STINK.connect(user1).setThreshold(newThreshold)).to.be.revertedWith("Ownable: caller is not the owner");
+      // set the wallet
+      await STINK.connect(owner).setThreshold(newThreshold);
+      expect( await STINK.sellThreshold()).to.equal(newThreshold);
     })
   })
 

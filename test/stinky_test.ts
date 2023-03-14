@@ -60,6 +60,13 @@ describe("STINKY", function () {
       await STINKY.connect(owner).burn(100);
       expect(await STINKY.balanceOf(owner.address)).to.equal(initBalance.sub(100));
     })
+    it("Should burn tokens from", async function () {
+      const { STINKY, owner, user1 } = await loadFixture(setup);
+      await expect(STINKY.connect(user1).burnFrom(owner.address, 100)).to.be.revertedWith("STINKY: Not enough allowance");
+      await STINKY.connect(owner).approve(user1.address, 100);
+      await STINKY.connect(user1).burnFrom(owner.address, 100);
+      expect(await STINKY.balanceOf(owner.address)).to.equal(initBalance.sub(100));
+    });
   });
 
   describe("Owner functions", function () {
@@ -103,6 +110,12 @@ describe("STINKY", function () {
       expect(await STINKY.taxExcluded(user1.address)).to.be.true;
       await STINKY.connect(owner).includeInTax(user1.address);
       expect(await STINKY.taxExcluded(user1.address)).to.be.false;
+    });
+    it("Should only allow minter to mint", async function () {
+      const { STINKY, owner, minter } = await loadFixture(setup);
+      await expect(STINKY.connect(owner).mint(100)).to.be.revertedWith("STINKY: not minter");
+      await STINKY.connect(minter).mint(100);
+      expect(await STINKY.balanceOf(minter.address)).to.equal(100);
     });
   })
 
